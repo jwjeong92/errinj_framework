@@ -1,5 +1,13 @@
+import os
+
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"  # Arrange GPU devices starting from 0
+os.environ["CUDA_VISIBLE_DEVICES"]= "1"  # Set the GPU 2 to use
+
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from errinj.module import LinearWithBitError
+from errinj.evalutils import evaluate_perplexity
+from errinj.modelutils import get_layers
 import torch
 def replace_linear_with_custom(model, start_seed=42, bit_error_rate=1e-4, wbits=32, device="cuda"):
     """
@@ -20,8 +28,7 @@ def replace_linear_with_custom(model, start_seed=42, bit_error_rate=1e-4, wbits=
             module.out_features, 
             bias=module.bias is not None, 
             bit_error_rate=bit_error_rate, 
-            wbits=wbits, 
-            device=device
+            wbits=wbits
         )
         new_module.weight.data = module.weight.data.clone()
         if module.bias is not None:
@@ -59,14 +66,11 @@ def get_parent_module_and_attr(model, module_name):
 # OPT 모델 로드
 model_name = "/raid/LLM/opt-125m"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
-
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.half)
+evaluate_perplexity(model.to("cuda"), tokenizer)
 # 커스텀 Linear 교체
-model = replace_linear_with_custom(model, start_seed=42, bit_error_rate=1e-4, wbits=32, device="cuda")
+layers = get_layers(model)
+layers = replace_linear_with_custom(layers, start_seed=42, bit_error_rate=1e-4, wbits=4, device="cuda")
+model = model.to("cuda")
 
-# 입력 데이터
-text = "Hello, how are you?"
-inputs = tokenizer(text, return_tensors="pt")
-
-# Forward Pass
-output = model(**inputs)
+evaluate_perplexity(model, tokenizer)

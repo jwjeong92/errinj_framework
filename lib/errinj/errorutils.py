@@ -18,8 +18,8 @@ def error_gen(param, rate, seed, wbits):
     del bin_error
     return error_matrix.view(orig_size)
 
-def error_injection(param, rate, seed, wbits, device="cuda"):
-    err_mat = error_gen(param, rate, seed, wbits).to(device)
+def error_injection(param, rate, seed, wbits):
+    err_mat = error_gen(param, rate, seed, wbits)
     int_form = err_mat.dtype
     if param.element_size() == 2:
         return err_mat.to(torch.int16)
@@ -61,26 +61,19 @@ def error_gen_with_bias_fast(param, rate, seed, wbits, row_bias=None, col_bias=N
         col_cdf = None
     
     if row_cdf is not None:
-        row_indices = np.searchsorted(
-            row_cdf, np.random.rand(num_errors // wbits)
-        )
+        row_indices = np.searchsorted(row_cdf, np.random.rand(num_errors // wbits))
     else:
-        row_indices = np.random.randint(
-            0, rows, num_errors // wbits
-        )
+        row_indices = np.random.randint(0, rows, num_errors // wbits)
     
     if col_cdf is not None:
-        col_indices = np.searchsorted(
-            col_cdf, np.random.rand(num_errors // wbits)
-        )
+        col_indices = np.searchsorted(col_cdf, np.random.rand(num_errors // wbits))
     else:
-        col_indices = np.random.randint(
-            0, cols, num_errors // wbits
-        )
+        col_indices = np.random.randint(0, cols, num_errors // wbits)
     bit_positions = np.random.randint(0, wbits, num_errors)
 
-    error_mask = torch.zeros(num_elements, dtype=torch.int32, device=param.device) 
+    error_mask = torch.zeros(num_elements, dtype=torch.int16, device=param.device) 
     flattened_indices = torch.tensor(row_indices * cols + col_indices, device=param.device)
+    
     for idx, bit in zip(flattened_indices, bit_positions):
         error_mask[idx] ^= (1 << (wbits - 1 - bit))
 
